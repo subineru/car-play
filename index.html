@@ -175,7 +175,8 @@
       font-family: monospace;
     }
   </style>
-  <script src="./model_data.js"></script>
+  <!-- Cache-busting query string ensures latest 3D model is always loaded -->
+  <script src="./model_data.js?v=20261103_v5"></script>
   <script type="importmap">
     {
       "imports": {
@@ -190,7 +191,7 @@
 
   <div class="hud-header">
     <h1>AERO-S 3D <span class="badge-tcs">SPORT 運動版</span></h1>
-    <p>W/S 前進煞車 ・ A/D 轉向壓車 ・ U 掀開坐墊 ・ B 放入收納盒 ・ V 騎士儀表視角</p>
+    <p>W/S 前進煞車 ・ A/D 壓車過彎 ・ U 掀開坐墊 ・ B 放入收納盒 ・ V 騎士儀表視角</p>
   </div>
 
   <div class="hud-meter">
@@ -245,10 +246,11 @@
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0c0f16);
-    scene.fog = new THREE.FogExp2(0x0c0f16, 0.035);
+    scene.fog = new THREE.FogExp2(0x0c0f16, 0.028);
 
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.04, 120);
-    camera.position.set(-1.55, 1.05, 1.95);
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.04, 140);
+    // Start at a dynamic 3/4 rear-left angle so Left/Right match the rider's perspective immediately
+    camera.position.set(1.65, 1.12, -1.85);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -262,11 +264,12 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0.58, 0);
     controls.enableDamping = true;
-    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI * 0.492;
     controls.minDistance = 0.45;
-    controls.maxDistance = 8.0;
+    controls.maxDistance = 9.0;
 
-    // --- 2. Studio Lighting & Infinite Road Grid ---
+    // --- 2. Studio Lighting, Showroom Track Markings & Apex Pylons ---
     const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 1.45);
     scene.add(hemiLight);
 
@@ -280,16 +283,133 @@
     rimLight.position.set(4, 3, 5);
     scene.add(rimLight);
 
-    const groundGeo = new THREE.PlaneGeometry(200, 200);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x11151f, roughness: 0.75, metalness: 0.15 });
+    const groundGeo = new THREE.PlaneGeometry(240, 240);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x10141d, roughness: 0.78, metalness: 0.15 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const grid = new THREE.GridHelper(200, 200, 0x334155, 0x1e293b);
+    const grid = new THREE.GridHelper(240, 120, 0x3b4d6b, 0x1e293b);
     grid.position.y = 0.002;
     scene.add(grid);
+
+    // Showroom Test-Track Rings & Glowing Apex Cones (gives strong visual reference when cornering!)
+    const trackGroup = new THREE.Group();
+    scene.add(trackGroup);
+
+    const ringRadii = [3.5, 7.5, 12.0];
+    ringRadii.forEach((r, idx) => {
+      const rGeo = new THREE.RingGeometry(r - 0.04, r + 0.04, 96);
+      const rMat = new THREE.MeshBasicMaterial({
+        color: idx === 1 ? 0x22d3ee : 0x334155,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: idx === 1 ? 0.45 : 0.3
+      });
+      const rMesh = new THREE.Mesh(rGeo, rMat);
+      rMesh.rotation.x = -Math.PI / 2;
+      rMesh.position.y = 0.004;
+      trackGroup.add(rMesh);
+    });
+
+    // Add 12 glowing showroom track pylons around the 7.5m circle
+    const pylonBodyGeo = new THREE.CylinderGeometry(0.035, 0.08, 0.42, 16);
+    const pylonBaseGeo = new THREE.BoxGeometry(0.22, 0.03, 0.22);
+    const pylonMat = new THREE.MeshStandardMaterial({
+      color: 0xe61e2a,
+      emissive: 0xe61e2a,
+      emissiveIntensity: 0.45,
+      roughness: 0.3
+    });
+    const pylonStripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const pylonStripeGeo = new THREE.CylinderGeometry(0.048, 0.058, 0.09, 16);
+    const pylonBaseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+
+    for (let i = 0; i < 12; i++) {
+      const ang = (i / 12) * Math.PI * 2;
+      const px = Math.cos(ang) * 7.5;
+      const pz = Math.sin(ang) * 7.5;
+      const pNode = new THREE.Group();
+      pNode.position.set(px, 0, pz);
+
+      const baseM = new THREE.Mesh(pylonBaseGeo, pylonBaseMat);
+      baseM.position.y = 0.015;
+      const bodyM = new THREE.Mesh(pylonBodyGeo, pylonMat);
+      bodyM.position.y = 0.22;
+      bodyM.castShadow = true;
+      const stripeM = new THREE.Mesh(pylonStripeGeo, pylonStripeMat);
+      stripeM.position.y = 0.26;
+
+      pNode.add(baseM, bodyM, stripeM);
+      trackGroup.add(pNode);
+    }
+
+    // --- 2B. Dynamic Tire Cornering Trail Ribbons (Front & Rear Tire Tracks) ---
+    const TRAIL_MAX = 70;
+    function createTireTrail(colorHex, width) {
+      const positions = new Float32Array(TRAIL_MAX * 2 * 3);
+      const colors = new Float32Array(TRAIL_MAX * 2 * 3);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const indices = [];
+      for (let i = 0; i < TRAIL_MAX - 1; i++) {
+        const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+        indices.push(a, b, c, b, d, c);
+      }
+      geo.setIndex(indices);
+
+      const mat = new THREE.MeshBasicMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+
+      return {
+        mesh,
+        geo,
+        width,
+        baseColor: new THREE.Color(colorHex),
+        history: []
+      };
+    }
+
+    const rearTrail = createTireTrail(0x22d3ee, 0.095);
+    const frontTrail = createTireTrail(0xf59e0b, 0.065);
+
+    function updateTireTrail(trail, worldPos, headingAngle) {
+      const last = trail.history[0];
+      if (!last || last.pos.distanceToSquared(worldPos) > 0.012) {
+        trail.history.unshift({ pos: worldPos.clone(), heading: headingAngle });
+        if (trail.history.length > TRAIL_MAX) trail.history.pop();
+      }
+      const posAttr = trail.geo.attributes.position;
+      const colAttr = trail.geo.attributes.color;
+      const count = trail.history.length;
+
+      for (let i = 0; i < TRAIL_MAX; i++) {
+        const sample = trail.history[Math.min(i, count - 1)] || { pos: worldPos, heading: headingAngle };
+        const rx = Math.cos(sample.heading) * (trail.width * 0.5);
+        const rz = -Math.sin(sample.heading) * (trail.width * 0.5);
+
+        const fade = Math.max(0, 1 - i / Math.max(1, count - 1));
+        const vIdx = i * 2;
+        posAttr.setXYZ(vIdx, sample.pos.x - rx, 0.006, sample.pos.z - rz);
+        posAttr.setXYZ(vIdx + 1, sample.pos.x + rx, 0.006, sample.pos.z + rz);
+
+        colAttr.setXYZ(vIdx, trail.baseColor.r * fade, trail.baseColor.g * fade, trail.baseColor.b * fade);
+        colAttr.setXYZ(vIdx + 1, trail.baseColor.r * fade, trail.baseColor.g * fade, trail.baseColor.b * fade);
+      }
+      posAttr.needsUpdate = true;
+      colAttr.needsUpdate = true;
+    }
 
     // --- 3. Web Audio API Synthesizer (Horn, Turn Relay, Seat Latch & Cargo Pack) ---
     let audioCtx = null;
@@ -397,31 +517,26 @@
       const ctx = dashCtx;
       const w = 512, h = 256;
 
-      // Deep dark glass background
       const grad = ctx.createLinearGradient(0, 0, 0, h);
       grad.addColorStop(0, '#050b14');
       grad.addColorStop(1, '#091322');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
 
-      // Outer futuristic cyan border frame
       ctx.strokeStyle = 'rgba(34, 211, 238, 0.45)';
       ctx.lineWidth = 4;
       ctx.strokeRect(8, 8, w - 16, h - 16);
 
-      // --- Top Indicator Bar ---
-      // Left Turn Indicator (◀)
+      // Top Indicator Bar
       ctx.font = '900 32px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillStyle = leftOn ? '#f59e0b' : 'rgba(255,255,255,0.12)';
       ctx.fillText('◀', 26, 44);
 
-      // Right Turn Indicator (▶)
       ctx.textAlign = 'right';
       ctx.fillStyle = rightOn ? '#f59e0b' : 'rgba(255,255,255,0.12)';
       ctx.fillText('▶', w - 26, 44);
 
-      // Center Status Badges (DRL / LowBeam / HighBeam / Trunk Open)
       ctx.font = 'bold 16px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = lightMode >= 1 ? '#10b981' : 'rgba(255,255,255,0.15)';
@@ -436,7 +551,7 @@
       ctx.fillStyle = seatOpen ? '#ef4444' : 'rgba(255,255,255,0.15)';
       ctx.fillText(seatOpen ? '🔓TRUNK' : '🔒LOCK', 360, 38);
 
-      // --- Dynamic Sweeping RPM Bar (22 segments) ---
+      // Dynamic Sweeping RPM Bar (22 segments)
       const totalBars = 22;
       const activeBars = Math.max(2, Math.round(rpmRatio * totalBars));
       for (let i = 0; i < totalBars; i++) {
@@ -452,7 +567,6 @@
         ctx.fillRect(bx, by, bw, bh);
       }
 
-      // RPM Scale numbers
       ctx.font = 'bold 12px monospace';
       ctx.fillStyle = '#64748b';
       ctx.textAlign = 'left';
@@ -461,7 +575,7 @@
         ctx.fillText(String(r), 28 + (r / 10) * 420, 94);
       }
 
-      // --- Left Zone: SPORT Mode & TCS ---
+      // Left Zone: SPORT Mode & TCS
       ctx.fillStyle = 'rgba(230, 30, 42, 0.25)';
       ctx.fillRect(28, 112, 108, 42);
       ctx.strokeStyle = '#e61e2a';
@@ -480,7 +594,7 @@
       ctx.fillText('BAT: 14.2V', 30, 206);
       ctx.fillText('ODO: 0168km', 30, 230);
 
-      // --- Center Zone: Giant Digital Speedometer ---
+      // Center Zone: Giant Digital Speedometer
       ctx.font = '900 96px sans-serif';
       ctx.fillStyle = '#f8fafc';
       ctx.textAlign = 'center';
@@ -490,19 +604,17 @@
       ctx.fillStyle = '#22d3ee';
       ctx.fillText('KM/H', 256, 228);
 
-      // --- Right Zone: Fuel Gauge & Cargo Box Status ---
+      // Right Zone: Fuel Gauge & Cargo Box Status
       ctx.font = 'bold 15px monospace';
       ctx.textAlign = 'right';
       ctx.fillStyle = '#10b981';
       ctx.fillText(`BOX: ${cargoCount}/3`, w - 28, 132);
 
-      // 3 Cargo Box mini icons on TFT screen
       for (let c = 0; c < 3; c++) {
         ctx.fillStyle = c < cargoCount ? '#10b981' : 'rgba(255,255,255,0.12)';
         ctx.fillRect(w - 116 + c * 30, 144, 24, 18);
       }
 
-      // Fuel bars (5 segments)
       ctx.fillStyle = '#94a3b8';
       ctx.fillText('FUEL', w - 28, 192);
       for (let f = 0; f < 5; f++) {
@@ -538,6 +650,7 @@
         vehicleRoot = gltf.scene;
         scene.add(vehicleRoot);
 
+        let fallbackSeatMesh = null;
         vehicleRoot.traverse((node) => {
           if (node.isMesh) {
             node.castShadow = true;
@@ -566,6 +679,7 @@
           if (node.name === 'Front_Wheel_Pivot') frontWheel = node;
           if (node.name === 'Rear_Wheel_Pivot') rearWheel = node;
           if (node.name === 'Seat_Pivot') seatPivot = node;
+          if (node.name === 'Vehicle_Sport_Seat') fallbackSeatMesh = node;
           if (node.name === 'Cargo_Box_1') { cargoBoxes[0] = node; cargoBaseY[0] = node.position.y; }
           if (node.name === 'Cargo_Box_2') { cargoBoxes[1] = node; cargoBaseY[1] = node.position.y; }
           if (node.name === 'Cargo_Box_3') { cargoBoxes[2] = node; cargoBaseY[2] = node.position.y; }
@@ -573,7 +687,15 @@
           if (node.name.endsWith('Brake_Levers')) brakeLeverObj = node;
         });
 
-        // Initialize Cargo Boxes hidden (0/3)
+        // Fallback pivot wrapper in case an older cached GLB without Seat_Pivot was loaded
+        if (!seatPivot && fallbackSeatMesh && fallbackSeatMesh.parent) {
+          seatPivot = new THREE.Group();
+          seatPivot.position.set(0, 0.602, 0.058);
+          fallbackSeatMesh.parent.add(seatPivot);
+          fallbackSeatMesh.position.sub(seatPivot.position);
+          seatPivot.add(fallbackSeatMesh);
+        }
+
         for (let i = 0; i < 3; i++) {
           if (cargoBoxes[i]) {
             cargoBoxes[i].visible = false;
@@ -611,10 +733,10 @@
     let hornActive = false;
     let seatOpen = false;
     let seatAngle = 0;
-    let cargoCount = 0; // 0..3 standardized boxes inside under-seat trunk
+    let cargoCount = 0;
     const cargoScale = [0, 0, 0];
-    let camMode = 0;   // 0: Free Orbit (follows bike!), 1: Close Chase, 2: Cockpit Dashboard View
-    const camLabels = ['自由環繞', '近距追焦', '騎士儀表'];
+    let camMode = 0;   // 0: Free Orbit (with dynamic cornering lag!), 1: Close Chase, 2: Cockpit Dashboard View
+    const camLabels = ['自由環繞', '動態追焦', '騎士儀表'];
 
     function setEmissive(mat, colorHex, intensity) {
       if (!mat) return;
@@ -668,9 +790,8 @@
       document.getElementById('seat-label').textContent = seatOpen ? '開啟' : '關閉';
       document.getElementById('btn-seat').classList.toggle('active-amber', seatOpen);
 
-      // If in Free Orbit mode and opening the seat, smoothly frame the open trunk & inner legshield from above-side
       if (seatOpen && camMode === 0 && vehicleRoot) {
-        const sideView = new THREE.Vector3(-1.15, 1.28, -0.35).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
+        const sideView = new THREE.Vector3(1.15, 1.28, -0.35).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
         camera.position.copy(vehicleRoot.position).add(sideView);
         controls.target.copy(vehicleRoot.position).add(new THREE.Vector3(0, 0.65, -0.15));
         controls.update();
@@ -679,7 +800,6 @@
 
     function cycleCargo() {
       cargoCount = (cargoCount + 1) % 4;
-      // Automatically open the seat when putting items in so the user sees the cargo boxes pack into the trunk!
       if (cargoCount > 0 && !seatOpen) {
         toggleSeat(true);
       }
@@ -695,7 +815,7 @@
       document.getElementById('btn-cam').classList.toggle('active', camMode === 1);
       document.getElementById('btn-cockpit').classList.toggle('active', camMode === 2);
       if (camMode === 0 && vehicleRoot) {
-        const defaultOrbit = new THREE.Vector3(-1.45, 1.05, 1.65).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
+        const defaultOrbit = new THREE.Vector3(1.55, 1.10, -1.75).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
         camera.position.copy(vehicleRoot.position).add(defaultOrbit);
         controls.target.set(vehicleRoot.position.x, 0.58, vehicleRoot.position.z);
         controls.update();
@@ -775,12 +895,13 @@
       if (k === 'h') setHorn(false);
     });
 
-    // --- 8. Physics, Animation & Render Loop ---
+    // --- 8. Physics, Cornering Trails, Spring-Lag Camera & Render Loop ---
     let speed = 0;        // m/s
     let steerAngle = 0;   // radians
     let heading = 0;      // radians
     let blinkTimer = 0;
     let blinkOn = false;
+    const camAnchor = new THREE.Vector3(0, 0, 0);
     const clock = new THREE.Clock();
 
     function animate() {
@@ -788,41 +909,43 @@
       const dt = Math.min(clock.getDelta(), 0.05);
 
       // Driving & Steering Physics
-      if (keys.w) speed = Math.min(speed + 8.0 * dt, 27.5);
+      if (keys.w) speed = Math.min(speed + 8.5 * dt, 26.0);
       else if (keys.s || brakeActive) speed = Math.max(speed - 15.0 * dt, -3.5);
-      else speed *= (1 - 1.2 * dt);
+      else speed *= (1 - 1.25 * dt);
       if (Math.abs(speed) < 0.05 && !keys.w && !keys.s) speed = 0;
 
-      const targetSteer = (keys.a ? 0.42 : 0) + (keys.d ? -0.42 : 0);
+      const targetSteer = (keys.a ? 0.46 : 0) + (keys.d ? -0.46 : 0);
       steerAngle += (targetSteer - steerAngle) * Math.min(1, 10 * dt);
 
       const kmh = Math.round(Math.abs(speed) * 3.6);
       document.getElementById('speed-num').textContent = kmh;
 
       if (vehicleRoot) {
-        const prevX = vehicleRoot.position.x;
-        const prevZ = vehicleRoot.position.z;
-
+        const turnRate = steerAngle * (speed * 0.42);
         if (Math.abs(speed) > 0.05) {
-          heading += steerAngle * (speed * 0.35) * dt;
+          heading += turnRate * dt;
         }
         vehicleRoot.rotation.y = heading;
 
-        const targetLean = -steerAngle * Math.min(Math.abs(speed) / 14.0, 1.0) * 0.52;
-        vehicleRoot.rotation.z += (targetLean - vehicleRoot.rotation.z) * Math.min(1, 8 * dt);
+        // Expressive cornering lean angle!
+        const targetLean = -steerAngle * Math.min(Math.abs(speed) / 11.0, 1.0) * 0.58;
+        vehicleRoot.rotation.z += (targetLean - vehicleRoot.rotation.z) * Math.min(1, 9 * dt);
 
         const moveDist = speed * dt;
         vehicleRoot.position.x += Math.sin(heading) * moveDist;
         vehicleRoot.position.z += Math.cos(heading) * moveDist;
 
-        const dx = vehicleRoot.position.x - prevX;
-        const dz = vehicleRoot.position.z - prevZ;
-
-        // Keep infinite grid centered near scooter
-        grid.position.x = Math.floor(vehicleRoot.position.x);
-        grid.position.z = Math.floor(vehicleRoot.position.z);
+        // Keep infinite grid centered near scooter (snapped to 2m cell size so grid lines visibly scroll!)
+        grid.position.x = Math.floor(vehicleRoot.position.x / 2) * 2;
+        grid.position.z = Math.floor(vehicleRoot.position.z / 2) * 2;
         ground.position.x = vehicleRoot.position.x;
         ground.position.z = vehicleRoot.position.z;
+
+        // Update Front & Rear Tire Cornering Trail Ribbons
+        const rearWheelWorld = new THREE.Vector3(0, 0, -0.60).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading).add(vehicleRoot.position);
+        const frontWheelWorld = new THREE.Vector3(0, 0, 0.68).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading).add(vehicleRoot.position);
+        updateTireTrail(rearTrail, rearWheelWorld, heading);
+        updateTireTrail(frontTrail, frontWheelWorld, heading + steerAngle * 0.6);
 
         // Rotate Handlebar/Fork around local Y axis
         if (steerPivot) steerPivot.rotation.y = steerAngle;
@@ -852,7 +975,6 @@
             box.visible = true;
             const s = Math.max(0.02, cargoScale[i]);
             box.scale.setScalar(s);
-            // Slight drop-in effect along vertical Y axis in glTF space
             box.position.y = cargoBaseY[i] + (1.0 - s) * 0.14;
           }
         }
@@ -868,25 +990,51 @@
           }
         }
 
-        // Camera Modes (Fixed so driving never pulls the camera far away!)
+        // --- Dynamic Spring-Lag Camera System (gives real cornering & carving feel!) ---
         if (camMode === 0) {
-          // Translate both camera and orbit target by (dx, dz) so camera distance stays constant while driving!
-          camera.position.x += dx;
-          camera.position.z += dz;
-          controls.target.x += dx;
-          controls.target.z += dz;
+          // Centrifugal lateral offset + forward lead so the scooter visibly carves across the screen when turning!
+          const lateralShift = -steerAngle * Math.min(Math.abs(speed) / 12.0, 1.0) * 0.42;
+          const forwardLead = Math.min(speed / 18.0, 1.0) * 0.28;
+          const desiredAnchor = new THREE.Vector3(lateralShift, 0, forwardLead)
+            .applyAxisAngle(new THREE.Vector3(0, 1, 0), heading)
+            .add(vehicleRoot.position);
+
+          const prevAnchorX = camAnchor.x;
+          const prevAnchorZ = camAnchor.z;
+          // Spring damping follow (0.10): bike surges ahead/into the turn first, camera smoothly catches up!
+          camAnchor.lerp(desiredAnchor, Math.min(1, 7.5 * dt));
+          const adx = camAnchor.x - prevAnchorX;
+          const adz = camAnchor.z - prevAnchorZ;
+
+          camera.position.x += adx;
+          camera.position.z += adz;
+          controls.target.x += adx;
+          controls.target.z += adz;
+
+          // Gentle partial yaw follow when turning so you feel the circular orbit sweep!
+          if (Math.abs(turnRate) > 0.01) {
+            const relCam = camera.position.clone().sub(controls.target);
+            relCam.applyAxisAngle(new THREE.Vector3(0, 1, 0), turnRate * dt * 0.45);
+            camera.position.copy(controls.target).add(relCam);
+          }
+
           controls.update();
         } else if (camMode === 1) {
-          // Close, dynamic third-person chase camera
-          const offset = new THREE.Vector3(0, 1.08, -1.68).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
-          camera.position.lerp(vehicleRoot.position.clone().add(offset), 0.18);
-          const lookAtPt = vehicleRoot.position.clone().add(new THREE.Vector3(0, 0.66, 0.95).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading));
+          // Dynamic racing chase camera with centrifugal swing
+          const swingX = -steerAngle * Math.min(Math.abs(speed) / 12.0, 1.0) * 0.48;
+          const offset = new THREE.Vector3(swingX, 1.06, -1.72).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
+          camera.position.lerp(vehicleRoot.position.clone().add(offset), Math.min(1, 9.5 * dt));
+          const lookAtPt = vehicleRoot.position.clone().add(
+            new THREE.Vector3(steerAngle * 0.55, 0.64, 1.15).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading)
+          );
           camera.lookAt(lookAtPt);
         } else if (camMode === 2) {
-          // First-Person Rider Dashboard Cockpit View (close view of 3D TFT screen, mirrors & front glovebox)
-          const eyeOffset = new THREE.Vector3(0, 1.13, -0.05).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
+          // First-Person Rider Dashboard Cockpit View (tilts slightly with bike lean!)
+          const eyeOffset = new THREE.Vector3(-vehicleRoot.rotation.z * 0.25, 1.13, -0.05).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
           camera.position.copy(vehicleRoot.position).add(eyeOffset);
-          const forwardPt = vehicleRoot.position.clone().add(new THREE.Vector3(steerAngle * 0.35, 0.89, 0.90).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading));
+          const forwardPt = vehicleRoot.position.clone().add(
+            new THREE.Vector3(steerAngle * 0.38 - vehicleRoot.rotation.z * 0.35, 0.89, 0.90).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading)
+          );
           camera.lookAt(forwardPt);
         }
       }
@@ -909,7 +1057,7 @@
       }
 
       // Update live 3D TFT Dashboard CanvasTexture every frame
-      const rpmRatio = Math.min(1.0, 0.12 + (Math.abs(speed) / 27.5) * 0.82 + (keys.w ? 0.08 : 0));
+      const rpmRatio = Math.min(1.0, 0.12 + (Math.abs(speed) / 26.0) * 0.82 + (keys.w ? 0.08 : 0));
       drawDashboardTFT(kmh, rpmRatio, onL, onR, lightMode, seatOpen, cargoCount);
 
       renderer.render(scene, camera);
