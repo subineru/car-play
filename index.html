@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AERO-S 3D — 運動速克達互動試駕展示</title>
+  <style>
+    :root {
+      --bg-dark: #0b0d12;
+      --panel-bg: rgba(16, 20, 28, 0.84);
+      --border: rgba(255, 255, 255, 0.12);
+      --accent-red: #e61e2a;
+      --accent-cyan: #22d3ee;
+      --accent-amber: #f59e0b;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #canvas-container { width: 100%; height: 100%; position: absolute; inset: 0; }
+
+    /* Top Header */
+    .hud-header {
+      position: absolute;
+      top: 20px;
+      left: 24px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent-red);
+      padding: 12px 18px;
+      border-radius: 10px;
+      pointer-events: none;
+    }
+    .hud-header h1 {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge-tcs {
+      font-size: 11px;
+      background: var(--accent-red);
+      color: #fff;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .hud-header p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Digital Speedometer & Status Cluster */
+    .hud-meter {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      padding: 14px 22px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      min-width: 260px;
+      justify-content: space-between;
+    }
+    .turn-arrow {
+      font-size: 22px;
+      font-weight: 900;
+      color: rgba(255, 255, 255, 0.15);
+      transition: color 0.08s, text-shadow 0.08s;
+    }
+    .turn-arrow.active {
+      color: var(--accent-amber);
+      text-shadow: 0 0 12px var(--accent-amber);
+    }
+    .speed-box { text-align: center; }
+    .speed-val {
+      font-size: 36px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--accent-cyan);
+      line-height: 1;
+    }
+    .speed-unit { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; }
+
+    /* Bottom Interactive Control Deck */
+    .hud-controls {
+      position: absolute;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel-bg);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      padding: 12px 18px;
+      border-radius: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      max-width: 95vw;
+    }
+    .ctrl-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: var(--text-main);
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.15s ease;
+    }
+    .ctrl-btn:hover { background: rgba(255, 255, 255, 0.13); }
+    .ctrl-btn.active {
+      background: rgba(34, 211, 238, 0.18);
+      border-color: var(--accent-cyan);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(34, 211, 238, 0.28);
+    }
+    .ctrl-btn.active-amber {
+      background: rgba(245, 158, 11, 0.22);
+      border-color: var(--accent-amber);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(245, 158, 11, 0.32);
+    }
+    .ctrl-btn.active-red {
+      background: rgba(230, 30, 42, 0.28);
+      border-color: var(--accent-red);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(230, 30, 42, 0.4);
+    }
+    .kbd {
+      font-size: 11px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #cbd5e1;
+      font-family: monospace;
+    }
+  </style>
+  <script src="./model_data.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div class="hud-header">
+    <h1>AERO-S 3D <span class="badge-tcs">SPORT 運動版</span></h1>
+    <p>W/S 前進煞車 ・ A/D 轉向壓車 ・ 滑鼠拖曳旋轉視角</p>
+  </div>
+
+  <div class="hud-meter">
+    <div id="ind-left" class="turn-arrow">◀</div>
+    <div class="speed-box">
+      <div id="speed-num" class="speed-val">0</div>
+      <div class="speed-unit">KM/H</div>
+    </div>
+    <div id="ind-right" class="turn-arrow">▶</div>
+  </div>
+
+  <div class="hud-controls">
+    <button id="btn-light" class="ctrl-btn active">
+      <span>💡 車燈：<b id="light-label">近光燈</b></span> <span class="kbd">L</span>
+    </button>
+    <button id="btn-turn-l" class="ctrl-btn">
+      <span>⬅ 左方向燈</span> <span class="kbd">Q</span>
+    </button>
+    <button id="btn-hazard" class="ctrl-btn">
+      <span>⚠️ 雙黃燈</span> <span class="kbd">Z</span>
+    </button>
+    <button id="btn-turn-r" class="ctrl-btn">
+      <span>➡ 右方向燈</span> <span class="kbd">E</span>
+    </button>
+    <button id="btn-brake" class="ctrl-btn">
+      <span>🛑 煞車尾燈</span> <span class="kbd">Space</span>
+    </button>
+    <button id="btn-horn" class="ctrl-btn">
+      <span>🔊 按喇叭</span> <span class="kbd">H</span>
+    </button>
+    <button id="btn-cam" class="ctrl-btn">
+      <span>🎥 視角：<b id="cam-label">展示環繞</b></span> <span class="kbd">C</span>
+    </button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // --- 1. Scene, Camera & Renderer ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0c0f16);
+    scene.fog = new THREE.FogExp2(0x0c0f16, 0.035);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 120);
+    camera.position.set(-1.75, 1.05, 2.25);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.25;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0.55, 0);
+    controls.enableDamping = true;
+    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.minDistance = 0.6;
+    controls.maxDistance = 12;
+
+    // --- 2. Studio Lighting & Infinite Road Grid ---
+    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 1.4);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    dirLight.position.set(-4, 7, -5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const rimLight = new THREE.DirectionalLight(0x60a5fa, 1.1);
+    rimLight.position.set(4, 3, 5);
+    scene.add(rimLight);
+
+    const groundGeo = new THREE.PlaneGeometry(200, 200);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x11151f, roughness: 0.75, metalness: 0.15 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const grid = new THREE.GridHelper(200, 200, 0x334155, 0x1e293b);
+    grid.position.y = 0.002;
+    scene.add(grid);
+
+    // --- 3. Web Audio API Synthesizer (Scooter Horn & Turn Signal Click) ---
+    let audioCtx = null;
+    let hornOsc1 = null, hornOsc2 = null, hornGain = null;
+
+    function ensureAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function startHornSound() {
+      ensureAudio();
+      if (hornOsc1) return;
+      hornGain = audioCtx.createGain();
+      hornGain.gain.setValueAtTime(0.01, audioCtx.currentTime);
+      hornGain.gain.exponentialRampToValueAtTime(0.22, audioCtx.currentTime + 0.02);
+
+      // Authentic dual-tone scooter horn (420 Hz + 510 Hz)
+      hornOsc1 = audioCtx.createOscillator();
+      hornOsc2 = audioCtx.createOscillator();
+      hornOsc1.type = 'sawtooth';
+      hornOsc2.type = 'triangle';
+      hornOsc1.frequency.setValueAtTime(420, audioCtx.currentTime);
+      hornOsc2.frequency.setValueAtTime(512, audioCtx.currentTime);
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(950, audioCtx.currentTime);
+      filter.Q.setValueAtTime(1.8, audioCtx.currentTime);
+
+      hornOsc1.connect(filter);
+      hornOsc2.connect(filter);
+      filter.connect(hornGain);
+      hornGain.connect(audioCtx.destination);
+      hornOsc1.start();
+      hornOsc2.start();
+    }
+
+    function stopHornSound() {
+      if (!hornOsc1) return;
+      try {
+        hornOsc1.stop();
+        hornOsc2.stop();
+        hornOsc1.disconnect();
+        hornOsc2.disconnect();
+      } catch (e) {}
+      hornOsc1 = null;
+      hornOsc2 = null;
+    }
+
+    function playRelayTick(high = true) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(high ? 1150 : 780, audioCtx.currentTime);
+      g.gain.setValueAtTime(0.06, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.025);
+      osc.connect(g);
+      g.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.028);
+    }
+
+    // --- 4. Load Vehicle GLB & Bind Rig Nodes ---
+    let vehicleRoot = null, steerPivot = null, frontWheel = null, rearWheel = null;
+    let hornBtnObj = null, brakeLeverObj = null;
+    const lightMats = { drl: null, low: null, high: null, turnL: null, turnR: null, tail: null };
+    let headSpotLight = null, headSpotTarget = null;
+    let hornRingMesh = null;
+
+    function base64ToArrayBuffer(b64) {
+      const bin = atob(b64);
+      const len = bin.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes.buffer;
+    }
+
+    const loader = new GLTFLoader();
+    const glbB64 = window.VEHICLE_GLB_BASE64;
+    if (glbB64) {
+      const buf = base64ToArrayBuffer(glbB64);
+      loader.parse(buf, '', (gltf) => {
+        vehicleRoot = gltf.scene;
+        scene.add(vehicleRoot);
+
+        vehicleRoot.traverse((node) => {
+          if (node.isMesh) {
+            node.castShadow = true;
+            node.receiveShadow = true;
+            if (node.material) {
+              const mName = node.material.name || '';
+              if (mName.includes('MAT_Light_DRL')) lightMats.drl = node.material;
+              if (mName.includes('MAT_Light_LowBeam')) lightMats.low = node.material;
+              if (mName.includes('MAT_Light_HighBeam')) lightMats.high = node.material;
+              if (mName.includes('MAT_Light_Turn_L')) lightMats.turnL = node.material;
+              if (mName.includes('MAT_Light_Turn_R')) lightMats.turnR = node.material;
+              if (mName.includes('MAT_Light_TailBrake')) lightMats.tail = node.material;
+            }
+          }
+          if (node.name === 'Steering_Pivot') steerPivot = node;
+          if (node.name === 'Front_Wheel_Pivot') frontWheel = node;
+          if (node.name === 'Rear_Wheel_Pivot') rearWheel = node;
+          if (node.name.endsWith('Horn_Button')) hornBtnObj = node;
+          if (node.name.endsWith('Brake_Levers')) brakeLeverObj = node;
+        });
+
+        // Attach real 3D Headlight SpotLight to project onto the road ahead (+Z in glTF Y-up space)
+        headSpotLight = new THREE.SpotLight(0xe0f2fe, 12.0, 28, Math.PI * 0.24, 0.45, 1.2);
+        headSpotLight.position.set(0, 0.56, 0.66);
+        headSpotLight.castShadow = true;
+        headSpotTarget = new THREE.Object3D();
+        headSpotTarget.position.set(0, 0.05, 7.5);
+        vehicleRoot.add(headSpotLight);
+        vehicleRoot.add(headSpotTarget);
+        headSpotLight.target = headSpotTarget;
+
+        // Visual Horn Sonic Wave Ring
+        const ringGeo = new THREE.RingGeometry(0.08, 0.11, 32);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, transparent: true, opacity: 0 });
+        hornRingMesh = new THREE.Mesh(ringGeo, ringMat);
+        hornRingMesh.position.set(0, 0.62, 0.72);
+        vehicleRoot.add(hornRingMesh);
+
+        applyLightState();
+      });
+    }
+
+    // --- 5. Interactive States (Lights, Turn Signals, Brake, Horn, Camera) ---
+    let lightMode = 2; // 0: Off, 1: DRL, 2: Low Beam, 3: High Beam
+    const lightLabels = ['全關', '日行燈', '近光燈', '遠近全開'];
+    let turnMode = 0;  // 0: Off, -1: Left, 1: Right, 2: Hazard
+    let brakeActive = false;
+    let hornActive = false;
+    let camMode = 0;   // 0: Orbit, 1: Chase, 2: Cockpit
+    const camLabels = ['展示環繞', '第三人稱追焦', '騎士第一人稱'];
+
+    function setEmissive(mat, colorHex, intensity) {
+      if (!mat) return;
+      mat.emissive = new THREE.Color(colorHex);
+      mat.emissiveIntensity = intensity;
+    }
+
+    function applyLightState() {
+      const btnLight = document.getElementById('btn-light');
+      document.getElementById('light-label').textContent = lightLabels[lightMode];
+      btnLight.classList.toggle('active', lightMode > 0);
+
+      // DRL
+      setEmissive(lightMats.drl, 0xe0f2fe, lightMode >= 1 ? 3.5 : 0.0);
+      // Low Beam
+      setEmissive(lightMats.low, 0xe0f2fe, lightMode >= 2 ? 6.0 : 0.05);
+      // High Beam
+      setEmissive(lightMats.high, 0xffffff, lightMode === 3 ? 9.0 : 0.02);
+
+      if (headSpotLight && headSpotTarget) {
+        if (lightMode <= 1) {
+          headSpotLight.intensity = 0;
+        } else if (lightMode === 2) {
+          headSpotLight.intensity = 16;
+          headSpotLight.angle = Math.PI * 0.24;
+          headSpotTarget.position.set(0, 0.02, 7.0);
+        } else {
+          headSpotLight.intensity = 32;
+          headSpotLight.angle = Math.PI * 0.30;
+          headSpotTarget.position.set(0, 0.35, 14.0);
+        }
+      }
+
+      // Tail / Brake light
+      const tailInt = brakeActive ? 8.5 : (lightMode >= 1 ? 1.8 : 0.0);
+      setEmissive(lightMats.tail, 0xff1122, tailInt);
+      document.getElementById('btn-brake').classList.toggle('active-red', brakeActive);
+    }
+
+    function updateTurnUI() {
+      document.getElementById('btn-turn-l').classList.toggle('active-amber', turnMode === -1);
+      document.getElementById('btn-turn-r').classList.toggle('active-amber', turnMode === 1);
+      document.getElementById('btn-hazard').classList.toggle('active-amber', turnMode === 2);
+      if (turnMode === 0) {
+        setEmissive(lightMats.turnL, 0xff7700, 0.0);
+        setEmissive(lightMats.turnR, 0xff7700, 0.0);
+        document.getElementById('ind-left').classList.remove('active');
+        document.getElementById('ind-right').classList.remove('active');
+      }
+    }
+
+    // --- 6. Input Handling (Keyboard & UI Buttons) ---
+    const keys = { w: false, a: false, s: false, d: false };
+
+    function cycleLight() {
+      ensureAudio();
+      lightMode = (lightMode + 1) % 4;
+      applyLightState();
+    }
+    function toggleTurn(mode) {
+      ensureAudio();
+      turnMode = (turnMode === mode) ? 0 : mode;
+      updateTurnUI();
+    }
+    function setBrake(state) {
+      brakeActive = state;
+      if (brakeLeverObj) brakeLeverObj.rotation.y = state ? 0.18 : 0.0;
+      applyLightState();
+    }
+    function setHorn(state) {
+      hornActive = state;
+      document.getElementById('btn-horn').classList.toggle('active-amber', state);
+      if (hornBtnObj) hornBtnObj.position.z = state ? -0.004 : 0.0;
+      if (state) startHornSound(); else stopHornSound();
+    }
+    function cycleCam() {
+      camMode = (camMode + 1) % 3;
+      document.getElementById('cam-label').textContent = camLabels[camMode];
+      document.getElementById('btn-cam').classList.toggle('active', camMode > 0);
+    }
+
+    document.getElementById('btn-light').addEventListener('click', cycleLight);
+    document.getElementById('btn-turn-l').addEventListener('click', () => toggleTurn(-1));
+    document.getElementById('btn-turn-r').addEventListener('click', () => toggleTurn(1));
+    document.getElementById('btn-hazard').addEventListener('click', () => toggleTurn(2));
+    document.getElementById('btn-cam').addEventListener('click', cycleCam);
+
+    const btnBrake = document.getElementById('btn-brake');
+    btnBrake.addEventListener('mousedown', () => setBrake(true));
+    btnBrake.addEventListener('mouseup', () => setBrake(false));
+    btnBrake.addEventListener('mouseleave', () => setBrake(false));
+
+    const btnHorn = document.getElementById('btn-horn');
+    btnHorn.addEventListener('mousedown', () => setHorn(true));
+    btnHorn.addEventListener('mouseup', () => setHorn(false));
+    btnHorn.addEventListener('mouseleave', () => setHorn(false));
+
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      const k = e.key.toLowerCase();
+      if (k === 'w' || e.key === 'ArrowUp') keys.w = true;
+      if (k === 's' || e.key === 'ArrowDown') { keys.s = true; setBrake(true); }
+      if (k === 'a' || e.key === 'ArrowLeft') keys.a = true;
+      if (k === 'd' || e.key === 'ArrowRight') keys.d = true;
+      if (e.code === 'Space') setBrake(true);
+      if (k === 'l') cycleLight();
+      if (k === 'q') toggleTurn(-1);
+      if (k === 'e') toggleTurn(1);
+      if (k === 'z') toggleTurn(2);
+      if (k === 'h') setHorn(true);
+      if (k === 'c') cycleCam();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || e.key === 'ArrowUp') keys.w = false;
+      if (k === 's' || e.key === 'ArrowDown') { keys.s = false; setBrake(false); }
+      if (k === 'a' || e.key === 'ArrowLeft') keys.a = false;
+      if (k === 'd' || e.key === 'ArrowRight') keys.d = false;
+      if (e.code === 'Space') setBrake(false);
+      if (k === 'h') setHorn(false);
+    });
+
+    // --- 7. Physics, Animation & Render Loop ---
+    let speed = 0;        // m/s
+    let steerAngle = 0;   // radians
+    let heading = 0;      // radians
+    let blinkTimer = 0;
+    let blinkOn = false;
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+
+      // Driving & Steering Physics
+      if (keys.w) speed = Math.min(speed + 7.5 * dt, 26.0);
+      else if (keys.s || brakeActive) speed = Math.max(speed - 14.0 * dt, -3.5);
+      else speed *= (1 - 1.2 * dt);
+      if (Math.abs(speed) < 0.05 && !keys.w && !keys.s) speed = 0;
+
+      const targetSteer = (keys.a ? 0.42 : 0) + (keys.d ? -0.42 : 0);
+      steerAngle += (targetSteer - steerAngle) * Math.min(1, 10 * dt);
+
+      document.getElementById('speed-num').textContent = Math.round(Math.abs(speed) * 3.6);
+
+      if (vehicleRoot) {
+        // In glTF Y-up exported from Blender (-Y forward in Blender becomes +Z forward in Three.js)
+        if (Math.abs(speed) > 0.05) {
+          heading += steerAngle * (speed * 0.35) * dt;
+        }
+        vehicleRoot.rotation.y = heading;
+        // Dynamic cornering lean angle!
+        const targetLean = -steerAngle * Math.min(Math.abs(speed) / 14.0, 1.0) * 0.55;
+        vehicleRoot.rotation.z += (targetLean - vehicleRoot.rotation.z) * Math.min(1, 8 * dt);
+
+        const moveDist = speed * dt;
+        vehicleRoot.position.x += Math.sin(heading) * moveDist;
+        vehicleRoot.position.z += Math.cos(heading) * moveDist;
+
+        // Keep infinite grid centered near scooter
+        grid.position.x = Math.floor(vehicleRoot.position.x);
+        grid.position.z = Math.floor(vehicleRoot.position.z);
+        ground.position.x = vehicleRoot.position.x;
+        ground.position.z = vehicleRoot.position.z;
+
+        // Rotate Handlebar/Fork around local Y axis
+        if (steerPivot) steerPivot.rotation.y = steerAngle;
+
+        // Spin Front & Rear Wheels around local X axis
+        const wheelSpin = (moveDist / 0.242);
+        if (frontWheel) frontWheel.rotation.x += wheelSpin;
+        if (rearWheel) rearWheel.rotation.x += wheelSpin;
+
+        // Horn sonic wave animation
+        if (hornRingMesh) {
+          if (hornActive) {
+            const t = ( performance.now() * 0.005 ) % 1;
+            hornRingMesh.scale.setScalar(1 + t * 4.5);
+            hornRingMesh.material.opacity = (1 - t) * 0.75;
+          } else {
+            hornRingMesh.material.opacity = 0;
+          }
+        }
+
+        // Camera Modes
+        if (camMode === 0) {
+          controls.target.lerp(new THREE.Vector3(vehicleRoot.position.x, 0.55, vehicleRoot.position.z), 0.15);
+          controls.update();
+        } else if (camMode === 1) {
+          // Third-person chase camera behind scooter (-Z local)
+          const offset = new THREE.Vector3(0, 1.35, -2.65).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
+          camera.position.lerp(vehicleRoot.position.clone().add(offset), 0.12);
+          const lookAtPt = vehicleRoot.position.clone().add(new THREE.Vector3(0, 0.65, 1.2).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading));
+          camera.lookAt(lookAtPt);
+        } else if (camMode === 2) {
+          // First-person Rider Cockpit View (looking over LCD dashboard & mirrors!)
+          const eyeOffset = new THREE.Vector3(0, 1.18, -0.12).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading);
+          camera.position.copy(vehicleRoot.position).add(eyeOffset);
+          const forwardPt = vehicleRoot.position.clone().add(new THREE.Vector3(steerAngle * 0.6, 0.88, 2.5).applyAxisAngle(new THREE.Vector3(0, 1, 0), heading));
+          camera.lookAt(forwardPt);
+        }
+      }
+
+      // Turn Signal Blinker Loop (90 blinks/min = 0.33s half-period)
+      if (turnMode !== 0) {
+        blinkTimer += dt;
+        if (blinkTimer >= 0.34) {
+          blinkTimer = 0;
+          blinkOn = !blinkOn;
+          playRelayTick(blinkOn);
+          const onL = blinkOn && (turnMode === -1 || turnMode === 2);
+          const onR = blinkOn && (turnMode === 1 || turnMode === 2);
+          setEmissive(lightMats.turnL, 0xff8800, onL ? 6.5 : 0.0);
+          setEmissive(lightMats.turnR, 0xff8800, onR ? 6.5 : 0.0);
+          document.getElementById('ind-left').classList.toggle('active', onL);
+          document.getElementById('ind-right').classList.toggle('active', onR);
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
