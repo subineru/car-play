@@ -176,7 +176,7 @@
     }
   </style>
   <!-- Cache-busting query string ensures latest 3D model is always loaded -->
-  <script src="./model_data.js?v=20261103_v6"></script>
+  <script src="./model_data.js?v=20261103_v7"></script>
   <script type="importmap">
     {
       "imports": {
@@ -511,7 +511,7 @@
     const dashCtx = dashCanvas.getContext('2d');
     const dashTexture = new THREE.CanvasTexture(dashCanvas);
     dashTexture.colorSpace = THREE.SRGBColorSpace;
-    dashTexture.flipY = true;
+    dashTexture.flipY = false;
 
     function drawDashboardTFT(kmh, rpmRatio, leftOn, rightOn, lightMode, seatOpen, cargoCount) {
       const ctx = dashCtx;
@@ -643,7 +643,7 @@
     }
 
     const loader = new GLTFLoader();
-    const glbB64 = window.VEHICLE_GLB_BASE64 || window['KYMCO_GLB_BASE64'];
+    const glbB64 = window.VEHICLE_GLB_BASE64 || window['KYMCO_GLB_BASE64'] || window.MODEL_BASE64;
     if (glbB64) {
       const buf = base64ToArrayBuffer(glbB64);
       loader.parse(buf, '', (gltf) => {
